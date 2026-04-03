@@ -9,7 +9,7 @@ app.use(express.json());
 
 // ===================== 【必填】填写你的信息 =====================
 const API_KEY = "bce-v3/ALTAK-bYronxW8o9jHgAUkuYW8r/55c3634d99ce9881a72c4395f194a43a1447364b";
-const SECRET_KEY = "f25a99b8e6b64b66ac49e30f6f0f5576";
+const SECRET_KEY = "ALTAKonNbGSb93SydGtgn5i2C5";
 const AI_API_URL = "https://qianfan.baidubce.com/v2/chat/completions";
 // ================================================================
 
