@@ -8,18 +8,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ===================== 【必填】填你完整的AK（两行合起来） =====================
-const AK = process.env.BAIDU_AK;
-// 完整AK就是你截图里的两行：
+// ===================== 【唯一要改的地方】填你完整的AK =====================
+// 完整AK就是你截图里的两行，合起来：
 // bce-v3/ALTAK-umtg7D6UH2C66OYvaii8x/5ffa6b0987e01b1045b5dc744fe13b5b97622755
-// ============================================================================
+const AK = process.env.BAIDU_AK;
+// ==========================================================================
 
-// 新版IAM v3 签名工具（完美适配你这个AK，不需要SK！）
+// 新版IAM v3 签名工具（自动拆分AK，不需要单独SK，不用Token！）
 function signRequest(ak, method, uri, body = "") {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const host = "qianfan.baidubce.com";
   
-  // 1. 拆分AK（新版AK格式：bce-v3/ALTAK-id/sk）
+  // 1. 拆分新版AK（格式：bce-v3/ALTAK-id/sk）
   const akParts = ak.split("/");
   const accessKeyId = akParts[2];
   const secretAccessKey = akParts[3];
@@ -36,7 +36,7 @@ function signRequest(ak, method, uri, body = "") {
     crypto.createHash("sha256").update(body).digest("hex")
   ].join("\n");
 
-  // 3. 构造签名密钥
+  // 3. 生成签名密钥
   const signingKey = crypto.createHmac("sha256", secretAccessKey)
     .update("bce-auth-v1")
     .update(accessKeyId)
@@ -44,12 +44,12 @@ function signRequest(ak, method, uri, body = "") {
     .update("1800")
     .digest();
   
-  // 4. 生成签名
+  // 4. 生成最终签名
   const signature = crypto.createHmac("sha256", signingKey)
     .update(canonicalRequest)
     .digest("base64");
 
-  // 5. 返回认证头
+  // 5. 返回认证头（直接用这个头调用API，完全不用Token！）
   return {
     "Host": host,
     "x-bce-date": timestamp,
@@ -57,7 +57,7 @@ function signRequest(ak, method, uri, body = "") {
   };
 }
 
-// 原生https请求封装（彻底解决fetch is not a function问题）
+// 原生https请求（彻底解决fetch is not a function，不用装node-fetch！）
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -77,7 +77,7 @@ function httpsRequest(options, body) {
   });
 }
 
-// 聊天接口
+// 聊天接口（完全不用Token，直接签名调用）
 app.post("/api/chat", async (req, res) => {
   try {
     const uri = "/v2/chat/completions";
@@ -89,7 +89,7 @@ app.post("/api/chat", async (req, res) => {
       max_tokens: 1024
     });
 
-    // 生成签名头（只需要AK，不需要SK！）
+    // 生成签名头（只需要AK，不需要SK，不需要Token！）
     const headers = signRequest(AK, "POST", uri, requestBody);
     headers["Content-Type"] = "application/json";
     headers["Content-Length"] = Buffer.byteLength(requestBody);
@@ -104,6 +104,7 @@ app.post("/api/chat", async (req, res) => {
 
     // 发起请求
     const data = await httpsRequest(options, requestBody);
+    console.log("API返回：", data);
     res.json(data);
   } catch (err) {
     console.error("服务异常：", err);
