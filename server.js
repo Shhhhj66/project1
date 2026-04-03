@@ -1,5 +1,6 @@
 const express = require("express");
 const https = require("https");
+const crypto = require("crypto");
 const cors = require("cors");
 require("dotenv").config();
 const app = express();
@@ -18,18 +19,64 @@ if (!FULL_AK) {
   process.exit(1);
 }
 
-// 🔧 拆分AK（适配你的3段格式，提取AK和SK）
+// 🔧 拆分AK（适配你的3段格式）
 function splitAk(fullAk) {
   const parts = fullAk.split("/").filter(p => p.trim() !== "");
   console.log("🔍 AK原始分段：", parts.length, "段", parts);
-  // 你的AK是3段：bce-v3 / ALTAK-xxx / yyy
   if (parts.length === 3) {
     return {
-      accessKey: parts[1],
-      secretKey: parts[2]
+      accessKeyId: parts[1],
+      secretAccessKey: parts[2]
     };
   }
   throw new Error(`AK格式错误！当前分段数：${parts.length}，请检查AK完整性`);
+}
+
+// 🔧 百度云IAM v3 官方标准签名算法（严格对齐文档，解决invalid_iam_token）
+function signRequest(fullAk, method, uri, body = "") {
+  const { accessKeyId, secretAccessKey } = splitAk(fullAk);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const host = "qianfan.baidubce.com";
+
+  // 1. 构造规范请求串（严格按百度官方要求，空行、顺序、大小写不能错）
+  const canonicalRequest = [
+    method.toUpperCase(),
+    uri,
+    "",
+    `host:${host}`,
+    `x-bce-date:${timestamp}`,
+    "",
+    "host;x-bce-date",
+    crypto.createHash("sha256").update(body, "utf8").digest("hex")
+  ].join("\n");
+
+  // 2. 构造待签名字符串
+  const signingKey = crypto.createHmac("sha256", secretAccessKey)
+    .update("bce-auth-v1")
+    .update(accessKeyId)
+    .update(timestamp)
+    .update("1800")
+    .digest();
+  
+  const stringToSign = [
+    "bce-auth-v1",
+    accessKeyId,
+    timestamp,
+    "1800",
+    crypto.createHash("sha256").update(canonicalRequest, "utf8").digest("hex")
+  ].join("\n");
+
+  // 3. 生成最终签名
+  const signature = crypto.createHmac("sha256", signingKey)
+    .update(stringToSign, "utf8")
+    .digest("base64");
+
+  // 4. 构造认证头（严格按百度官方格式）
+  return {
+    "Host": host,
+    "x-bce-date": timestamp,
+    "Authorization": `bce-auth-v1/${accessKeyId}/${timestamp}/1800/host;x-bce-date/${signature}`
+  };
 }
 
 // 原生https请求封装
@@ -55,28 +102,29 @@ function httpsRequest(options, body) {
   });
 }
 
-// 聊天接口（用千帆最简单的API，完全不用自己签名！）
+// 聊天接口
 app.post("/api/chat", async (req, res) => {
   try {
     console.log("📥 收到前端请求：", req.body);
-    const { accessKey, secretKey } = splitAk(FULL_AK);
-
-    // 千帆官方最简单的API：直接在URL里传AK/SK，完全不用签名！
-    const uri = `/v2/chat/completions?access_key=${accessKey}&secret_key=${secretKey}`;
+    const uri = "/v2/chat/completions";
     const requestBody = JSON.stringify({
       model: "ernie-5.0",
       messages: req.body.messages,
-      temperature: 0.7
+      temperature: 0.7,
+      top_p: 0.8,
+      max_tokens: 1024
     });
+
+    // 生成签名头
+    const headers = signRequest(FULL_AK, "POST", uri, requestBody);
+    headers["Content-Type"] = "application/json; charset=utf-8";
+    headers["Content-Length"] = Buffer.byteLength(requestBody, "utf8");
 
     const options = {
       hostname: "qianfan.baidubce.com",
       path: uri,
       method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Content-Length": Buffer.byteLength(requestBody, "utf8")
-      }
+      headers: headers
     };
 
     const { statusCode, data } = await httpsRequest(options, requestBody);
@@ -89,7 +137,6 @@ app.post("/api/chat", async (req, res) => {
     }
 
     res.json(data);
-    
   } catch (err) {
     console.error("❌ 服务异常：", err);
     res.status(500).json({ error: err.message || "服务器内部错误" });
@@ -100,6 +147,6 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 后端服务已启动：http://localhost:${PORT}`);
   console.log("🔑 AK配置状态：✅ 已加载，长度：", FULL_AK.length);
-  const { accessKey, secretKey } = splitAk(FULL_AK);
-  console.log("🔑 AK拆分成功：AK=", accessKey, "SK长度=", secretKey.length);
+  const { accessKeyId, secretAccessKey } = splitAk(FULL_AK);
+  console.log("🔑 AK拆分成功：ID=", accessKeyId, "SK长度=", secretAccessKey.length);
 });
