@@ -16,7 +16,6 @@ async function sendMessage() {
   addMessage(text, "user");
   input.value = "";
 
-  // 显示加载中
   const loadingMsg = addMessage("AI思考中...", "bot");
 
   try {
@@ -29,23 +28,20 @@ async function sendMessage() {
     });
 
     const data = await res.json();
-    
-    // 移除加载提示
     loadingMsg.remove();
 
-    // 处理API返回
     if (data.error) {
       addMessage(`错误：${data.error}`, "bot");
       return;
     }
 
-    // 新版千帆接口正确解析方式
     const reply = data.choices?.[0]?.message?.content || "未获取到有效回复";
     addMessage(reply, "bot");
   } catch (err) {
     loadingMsg.remove();
     console.error("请求失败：", err);
-    addMessage("请求失败，请检查后端服务是否启动、Key是否正确", "bot");
+    // 修复：精准提示错误原因
+    addMessage(`请求失败：${err.message}`, "bot");
   }
 }
 
