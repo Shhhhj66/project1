@@ -1,23 +1,43 @@
+const API_URL = "http://localhost:3000/api/chat";
+
+const chatBox = document.getElementById("chatBox");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+
+sendBtn.addEventListener("click", sendMessage);
+input.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") sendMessage();
+});
+
 async function sendMessage() {
-    let input = document.getElementById("userInput");
-    let msg = input.value.trim();
-    if (!msg) return;
+  const text = input.value.trim();
+  if (!text) return;
 
-    let chatBox = document.getElementById("chatBox");
-    chatBox.innerHTML += `<div class="msg user">${msg}</div>`;
-    input.value = "";
+  addMessage(text, "user");
+  input.value = "";
 
-    // 模拟 AI 回复（后期可替换成真实AI接口）
-    let reply = await getAIReply(msg);
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: text }],
+        temperature: 0.7
+      })
+    });
 
-    chatBox.innerHTML += `<div class="msg bot">${reply}</div>`;
-    chatBox.scrollTop = chatBox.scrollHeight;
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || data.result || "未获取到回复";
+    addMessage(reply, "bot");
+  } catch (err) {
+    addMessage("请求失败，请检查后端服务", "bot");
+  }
 }
 
-// AI 回复函数（可优化、调参、对接大模型）
-async function getAIReply(msg) {
-    // 你可以在这里：
-    // 1. 对接讯飞 / 通义千问 / Gemini 等AI接口
-    // 2. 调整温度、最大长度等参数
-    return "你说：“" + msg + "”\n我是 AI 助手，正在为你思考答案...";
+function addMessage(text, role) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
