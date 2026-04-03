@@ -1,4 +1,5 @@
 const express = require("express");
+// 修复：使用兼容 CommonJS 的 node-fetch v2，或用原生 fetch 兼容写法
 const fetch = require("node-fetch");
 const cors = require("cors");
 const app = express();
@@ -18,7 +19,6 @@ let tokenExpireTime = 0;
 
 // 自动获取并缓存Access Token
 async function getAccessToken() {
-  // 缓存有效期内直接返回
   if (Date.now() < tokenExpireTime) {
     console.log("使用缓存的Token");
     return accessToken;
@@ -36,7 +36,6 @@ async function getAccessToken() {
       throw new Error(`获取Token失败: ${data.error || "未知错误"}`);
     }
 
-    // 缓存Token，提前1分钟过期
     accessToken = data.access_token;
     tokenExpireTime = Date.now() + data.expires_in * 1000 - 60000;
     console.log("Token获取成功，有效期：", data.expires_in, "秒");
@@ -53,7 +52,6 @@ app.post("/api/chat", async (req, res) => {
     console.log("收到前端请求：", req.body);
     const token = await getAccessToken();
 
-    // 调用千帆API
     const apiResp = await fetch(AI_API_URL, {
       method: "POST",
       headers: {
@@ -61,7 +59,7 @@ app.post("/api/chat", async (req, res) => {
         "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "ernie-3.5-8k", // 必须指定模型！
+        model: "ernie-3.5-8k",
         messages: req.body.messages,
         temperature: 0.7,
         top_p: 0.8,
@@ -72,7 +70,6 @@ app.post("/api/chat", async (req, res) => {
     const data = await apiResp.json();
     console.log("千帆API返回：", data);
 
-    // 检查API返回错误
     if (data.error) {
       console.error("API调用错误：", data.error);
       return res.status(400).json({ error: data.error.message });
