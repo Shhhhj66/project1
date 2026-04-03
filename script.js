@@ -31,16 +31,16 @@ async function sendMessage() {
     loadingMsg.remove();
 
     if (data.error) {
-      addMessage(`错误：${data.error}`, "bot");
+      addMessage(`错误：${data.error.message}`, "bot");
       return;
     }
 
+    // 适配新版千帆响应格式
     const reply = data.choices?.[0]?.message?.content || "未获取到有效回复";
     addMessage(reply, "bot");
   } catch (err) {
     loadingMsg.remove();
     console.error("请求失败：", err);
-    // 修复：精准提示错误原因
     addMessage(`请求失败：${err.message}`, "bot");
   }
 }
