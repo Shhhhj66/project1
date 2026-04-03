@@ -1,0 +1,13 @@
+# 环境变量文件，永远不提交
+.env
+.env.local
+# 依赖目录
+node_modules/
+# 日志文件
+npm-debug.log*
+# IDE配置
+.idea/
+.vscode/
+# 系统文件
+.DS_Store
+Thumbs.db
