@@ -1,30 +1,85 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>AI 智能问答助手</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>AI 问答助手</title>
+  <style>
+    body {
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 0 20px;
+      font-family: Arial, sans-serif;
+    }
+    .title {
+      text-align: center;
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+    .info {
+      text-align: center;
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .chat-box {
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 8px;
+      height: 400px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+      background: #fafafa;
+    }
+    .msg {
+      margin: 8px 0;
+      padding: 10px;
+      border-radius: 6px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    .user {
+      background: #d3eafd;
+      margin-left: auto;
+      text-align: right;
+    }
+    .bot {
+      background: #f1f1f1;
+      margin-right: auto;
+      text-align: left;
+    }
+    .input-area {
+      display: flex;
+      gap: 8px;
+    }
+    #input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    #sendBtn {
+      padding: 10px 16px;
+      background: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>AI 智能问答助手</h1>
-        
-        <!-- 这里显示你的姓名和学号 -->
-        <div class="info">
-            学号：202335020536<br>
-            姓名：沈豪杰
-        </div>
+  <div class="title">AI 智能问答系统</div>
+  <div class="info">
+    学号：202335020536 &nbsp;&nbsp; 姓名：沈豪杰
+  </div>
 
-        <div class="chat-box" id="chatBox">
-            <div class="msg bot">你好！我是 AI 问答助手，有什么可以帮你？</div>
-        </div>
+  <div class="chat-box" id="chatBox"></div>
 
-        <div class="input-area">
-            <input type="text" id="userInput" placeholder="输入你的问题...">
-            <button onclick="sendMessage()">发送</button>
-        </div>
-    </div>
+  <div class="input-area">
+    <input type="text" id="input" placeholder="请输入问题..." autocomplete="off">
+    <button id="sendBtn">发送</button>
+  </div>
 
-    <script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
