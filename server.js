@@ -3,49 +3,47 @@ const cors = require("cors");
 require("dotenv").config();
 const app = express();
 
-// 引入百度官方SDK
-const bce = require("baidubce-sdk");
+// 正确引入千帆大模型SDK（官方标准写法）
+const { ChatClient } = require("@baiducloud/qianfan");
 
-// ===================== 【填你完整的AK】 =====================
+// ===================== 【唯一要改的地方】填你完整的AK =====================
 const AK = process.env.BAIDU_AK;
-// ==========================================================
+// 完整AK格式：bce-v3/ALTAK-你的ID/你的SK
+// ==========================================================================
 
-// 配置SDK（自动解析AK中的ID和SK，完美适配你的Key）
-const config = {
-  credentials: {
-    accessKeyId: AK.split("/")[2], // 提取AccessKeyID
-    secretAccessKey: AK.split("/")[3] // 提取SecretAccessKey
-  },
-  endpoint: "https://qianfan.baidub.com"
-};
+// 拆分AK（自动提取AccessKey和SecretKey）
+const akParts = AK.split("/").filter(p => p);
+const ACCESS_KEY = akParts[2];
+const SECRET_KEY = akParts[3];
 
-// 初始化千帆客户端
-const client = new bce.qianfan.V2Client(config);
+// 初始化千帆聊天客户端（官方正确写法）
+const client = new ChatClient({
+  QIANFAN_ACCESS_KEY: ACCESS_KEY,
+  QIANFAN_SECRET_KEY: SECRET_KEY
+});
 
 app.use(cors());
 app.use(express.json());
 
-// 聊天接口（直接调用SDK，不用手动写签名，不用Token）
+// 聊天接口
 app.post("/api/chat", async (req, res) => {
   try {
-    const request = {
+    console.log("📥 收到前端请求：", req.body);
+    
+    // 调用千帆大模型API（官方SDK标准调用）
+    const response = await client.chatCompletion({
       model: "ernie-3.5-8k", // 替换成你开通的模型
       messages: req.body.messages,
       temperature: 0.7
-    };
+    });
 
-    // 官方SDK调用（这一行就够了，所有验证都由SDK完成）
-    const response = await client.chatCompletions(request);
-    
-    // 提取回复结果
-    const result = response.data;
-    res.json(result);
+    console.log("📤 API响应成功：", response);
+    res.json(response);
     
   } catch (err) {
-    console.error("❌ API调用异常：", err.response ? err.response.data : err.message);
-    // 把具体错误返回给前端
+    console.error("❌ API调用异常：", err);
     res.status(400).json({
-      error: err.response ? err.response.data.error : "网络异常"
+      error: err.message || "服务器内部错误"
     });
   }
 });
@@ -53,4 +51,5 @@ app.post("/api/chat", async (req, res) => {
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 后端服务已启动：http://localhost:${PORT}`);
+  console.log("🔑 AK配置状态：✅ 已加载");
 });
