@@ -1,5 +1,6 @@
 const express = require("express");
 const https = require("https");
+const crypto = require("crypto");
 const cors = require("cors");
 require("dotenv").config();
 const app = express();
@@ -7,44 +8,38 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ===================== 【唯一要改的地方】填你完整的AK =====================
+// ===================== 【填你完整的AK】 =====================
 const FULL_AK = process.env.BAIDU_AK?.trim();
-// ==========================================================================
+// ============================================================
 
-// 启动前校验AK
 if (!FULL_AK) {
-  console.error("❌ 错误：.env中未配置BAIDU_AK，或配置为空！");
+  console.error("❌ 错误：.env中未配置BAIDU_AK！");
   process.exit(1);
 }
 
-// 🔧 拆分AK（适配你的3段格式，提取AK和SK）
+// 拆分你的 AK（3段格式）
 function splitAk(fullAk) {
   const parts = fullAk.split("/").filter(p => p.trim() !== "");
-  console.log("🔍 AK原始分段：", parts.length, "段", parts);
-  // 你的AK是3段：bce-v3 / ALTAK-xxx / yyy
   if (parts.length === 3) {
     return {
       accessKey: parts[1],
       secretKey: parts[2]
     };
   }
-  throw new Error(`AK格式错误！当前分段数：${parts.length}，请检查AK完整性`);
+  throw new Error("AK格式不正确！");
 }
 
-// 原生https请求封装
+// 原生请求
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       let data = "";
-      res.on("data", (chunk) => (data += chunk));
+      res.on("data", chunk => data += chunk);
       res.on("end", () => {
         try {
-          resolve({
-            statusCode: res.statusCode,
-            data: JSON.parse(data)
-          });
+          resolve({ statusCode: res.statusCode, data: JSON.parse(data) });
         } catch (e) {
-          reject(new Error(`响应解析失败: ${e.message}，原始数据: ${data}`));
+          reject(new Error("解析失败：" + data));
         }
       });
     });
@@ -54,54 +49,64 @@ function httpsRequest(options, body) {
   });
 }
 
-// 聊天接口（用千帆最简单的API，完全不用自己签名！）
+// ===================== 聊天接口 =====================
 app.post("/api/chat", async (req, res) => {
   try {
-    console.log("📥 收到前端请求：", req.body);
     const { accessKey, secretKey } = splitAk(FULL_AK);
+    const uri = "/v2/chat/completions";
+    const host = "qianfan.baidubce.com";
+    const timestamp = Math.floor(Date.now() / 1000).toString();
 
-    // 千帆官方最简单的API：直接在URL里传AK/SK，完全不用签名！
-    const uri = `/rpc/2.0/ernie/3.5/chat?access_token=${accessKey}&secret_key=${secretKey}`;
+    // ✅ 关键：这里换成 ernie-5.0
     const requestBody = JSON.stringify({
+      model: "ernie-5.0",  // <--- 就是这里！
       messages: req.body.messages,
-      temperature: 0.7,
-      top_p: 0.8,
-      max_output_tokens: 1024
+      temperature: 0.7
     });
 
-    const options = {
-      hostname: "aip.baidubce.com",
-      path: uri,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Content-Length": Buffer.byteLength(requestBody, "utf8")
-      }
+    // 百度官方签名
+    const canonicalRequest = [
+      "POST", uri, "",
+      `host:${host}`,
+      `x-bce-date:${timestamp}`,
+      "",
+      "host;x-bce-date",
+      crypto.createHash("sha256").update(requestBody, "utf8").digest("hex")
+    ].join("\n");
+
+    const signingKey = crypto.createHmac("sha256", secretKey)
+      .update("bce-auth-v1")
+      .update(accessKey)
+      .update(timestamp)
+      .update("1800")
+      .digest();
+
+    const signature = crypto.createHmac("sha256", signingKey)
+      .update(canonicalRequest, "utf8")
+      .digest("base64");
+
+    const headers = {
+      "Host": host,
+      "x-bce-date": timestamp,
+      "Authorization": `bce-auth-v1/${accessKey}/${timestamp}/1800/host;x-bce-date/${signature}`,
+      "Content-Type": "application/json; charset=utf-8"
     };
 
+    const options = { hostname: host, path: uri, method: "POST", headers };
     const { statusCode, data } = await httpsRequest(options, requestBody);
-    console.log("📤 API响应状态码：", statusCode, "响应数据：", data);
 
-    // 处理API错误
-    if (statusCode !== 200 || data.error) {
-      const errorMsg = data.error?.message || `API请求失败，状态码：${statusCode}`;
-      return res.status(statusCode).json({ error: errorMsg });
-    }
+    console.log("✅ 成功返回：", data);
+    res.json(data);
 
-    // 适配千帆响应格式，提取AI回复
-    const reply = data.result || "未获取到有效回复";
-    res.json({ choices: [{ message: { content: reply } }] });
-    
   } catch (err) {
-    console.error("❌ 服务异常：", err);
-    res.status(500).json({ error: err.message || "服务器内部错误" });
+    console.error("❌ 错误：", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
 const PORT = 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 后端服务已启动：http://localhost:${PORT}`);
-  console.log("🔑 AK配置状态：✅ 已加载，长度：", FULL_AK.length);
-  const { accessKey, secretKey } = splitAk(FULL_AK);
-  console.log("🔑 AK拆分成功：AK=", accessKey, "SK长度=", secretKey.length);
+  console.log(`🚀 服务已启动：http://localhost:${PORT}`);
+  const { accessKey } = splitAk(FULL_AK);
+  console.log("🔑 AK 加载成功：", accessKey);
 });
