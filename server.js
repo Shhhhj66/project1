@@ -9,7 +9,6 @@ app.use(cors());
 app.use(express.json());
 
 // ===================== 【唯一要改的地方】填你完整的AK =====================
-// 完整AK格式：bce-v3/ALTAK-你的ID/你的SK
 const FULL_AK = process.env.BAIDU_AK?.trim();
 // ==========================================================================
 
@@ -19,20 +18,33 @@ if (!FULL_AK) {
   process.exit(1);
 }
 
-// 🔧 百度云IAM v3 标准签名算法（官方文档实现，100%正确）
+// 🔧 修复AK拆分逻辑：兼容3段/4段，自动提取ID和SK
+function splitAk(fullAk) {
+  const parts = fullAk.split("/").filter(p => p.trim() !== "");
+  console.log("🔍 AK原始分段：", parts.length, "段", parts);
+  
+  // 情况1：标准4段格式 bce-v3/ALTAK-id/sk
+  if (parts.length === 4) {
+    return { id: parts[2], sk: parts[3] };
+  }
+  // 情况2：3段格式 bce-v3/ALTAK-id/sk（末尾无斜杠）
+  if (parts.length === 3) {
+    return { id: parts[1], sk: parts[2] };
+  }
+  // 情况3：2段格式（兜底）
+  if (parts.length === 2) {
+    return { id: parts[0].split("-")[1], sk: parts[1] };
+  }
+  throw new Error(`AK格式错误！当前分段数：${parts.length}，请检查AK完整性`);
+}
+
+// 🔧 百度云IAM v3 标准签名算法
 function signRequest(fullAk, method, uri, body = "") {
+  const { id: accessKeyId, sk: secretAccessKey } = splitAk(fullAk);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const host = "qianfan.baidubce.com";
 
-  // 1. 拆分AK（严格按bce-v3/ALTAK-id/sk格式拆分）
-  const akParts = fullAk.split("/").filter(p => p.trim() !== "");
-  if (akParts.length !== 4) {
-    throw new Error(`AK格式错误！当前分段数：${akParts.length}，请检查AK完整性`);
-  }
-  const accessKeyId = akParts[2];
-  const secretAccessKey = akParts[3];
-
-  // 2. 构造规范请求串（严格按百度官方标准）
+  // 构造规范请求串
   const canonicalRequest = [
     method,
     uri,
@@ -44,7 +56,7 @@ function signRequest(fullAk, method, uri, body = "") {
     crypto.createHash("sha256").update(body, "utf8").digest("hex")
   ].join("\n");
 
-  // 3. 构造签名密钥
+  // 构造签名密钥
   const signingKey = crypto.createHmac("sha256", secretAccessKey)
     .update("bce-auth-v1")
     .update(accessKeyId)
@@ -52,12 +64,12 @@ function signRequest(fullAk, method, uri, body = "") {
     .update("1800")
     .digest();
 
-  // 4. 生成最终签名
+  // 生成最终签名
   const signature = crypto.createHmac("sha256", signingKey)
     .update(canonicalRequest, "utf8")
     .digest("base64");
 
-  // 5. 返回认证头
+  // 返回认证头
   return {
     "Host": host,
     "x-bce-date": timestamp,
@@ -65,7 +77,7 @@ function signRequest(fullAk, method, uri, body = "") {
   };
 }
 
-// 原生https请求封装（彻底解决所有依赖问题）
+// 原生https请求封装
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -75,7 +87,6 @@ function httpsRequest(options, body) {
         try {
           resolve({
             statusCode: res.statusCode,
-            headers: res.headers,
             data: JSON.parse(data)
           });
         } catch (e) {
@@ -95,7 +106,7 @@ app.post("/api/chat", async (req, res) => {
     console.log("📥 收到前端请求：", req.body);
     const uri = "/v2/chat/completions";
     const requestBody = JSON.stringify({
-      model: "ernie-3.5-8k", // 替换成你开通的模型
+      model: "ernie-3.5-8k",
       messages: req.body.messages,
       temperature: 0.7,
       top_p: 0.8,
@@ -134,4 +145,6 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 后端服务已启动：http://localhost:${PORT}`);
   console.log("🔑 AK配置状态：✅ 已加载，长度：", FULL_AK.length);
+  const { id, sk } = splitAk(FULL_AK);
+  console.log("🔑 AK拆分成功：ID=", id, "SK长度=", sk.length);
 });
