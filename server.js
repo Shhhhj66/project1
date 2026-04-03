@@ -4,7 +4,7 @@ require("dotenv").config();
 const app = express();
 
 // 正确引入千帆大模型SDK（官方标准写法）
-const { ChatClient } = require("@baiducloud/qianfan");
+const qianfan = require("@baiducloud/qianfan");
 
 // ===================== 【唯一要改的地方】填你完整的AK =====================
 const AK = process.env.BAIDU_AK;
@@ -12,12 +12,12 @@ const AK = process.env.BAIDU_AK;
 // ==========================================================================
 
 // 拆分AK（自动提取AccessKey和SecretKey）
-const akParts = AK.split("/").filter(p => p);
+const akParts = AK.split("/").filter(p => p.trim());
 const ACCESS_KEY = akParts[2];
 const SECRET_KEY = akParts[3];
 
-// 初始化千帆聊天客户端（官方正确写法）
-const client = new ChatClient({
+// 配置千帆认证（官方正确写法）
+qianfan.auth({
   QIANFAN_ACCESS_KEY: ACCESS_KEY,
   QIANFAN_SECRET_KEY: SECRET_KEY
 });
@@ -30,8 +30,8 @@ app.post("/api/chat", async (req, res) => {
   try {
     console.log("📥 收到前端请求：", req.body);
     
-    // 调用千帆大模型API（官方SDK标准调用）
-    const response = await client.chatCompletion({
+    // 调用千帆大模型API（官方SDK标准调用，无需new构造函数）
+    const response = await qianfan.ChatCompletion({
       model: "ernie-3.5-8k", // 替换成你开通的模型
       messages: req.body.messages,
       temperature: 0.7
