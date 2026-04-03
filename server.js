@@ -18,62 +18,72 @@ if (!FULL_AK) {
   process.exit(1);
 }
 
-// 🔧 修复AK拆分逻辑：兼容3段/4段，自动提取ID和SK
+// 🔧 严格按百度云IAM v3标准拆分AK（适配3段格式）
 function splitAk(fullAk) {
   const parts = fullAk.split("/").filter(p => p.trim() !== "");
   console.log("🔍 AK原始分段：", parts.length, "段", parts);
   
-  // 情况1：标准4段格式 bce-v3/ALTAK-id/sk
-  if (parts.length === 4) {
-    return { id: parts[2], sk: parts[3] };
-  }
-  // 情况2：3段格式 bce-v3/ALTAK-id/sk（末尾无斜杠）
+  // 你的AK是3段：bce-v3 / ALTAK-xxx / yyy
   if (parts.length === 3) {
-    return { id: parts[1], sk: parts[2] };
-  }
-  // 情况3：2段格式（兜底）
-  if (parts.length === 2) {
-    return { id: parts[0].split("-")[1], sk: parts[1] };
+    return {
+      accessKeyId: parts[1],
+      secretAccessKey: parts[2]
+    };
   }
   throw new Error(`AK格式错误！当前分段数：${parts.length}，请检查AK完整性`);
 }
 
-// 🔧 百度云IAM v3 标准签名算法
+// 🔧 百度云IAM v3 官方标准签名算法（严格对齐文档，解决invalid_iam_token）
 function signRequest(fullAk, method, uri, body = "") {
-  const { id: accessKeyId, sk: secretAccessKey } = splitAk(fullAk);
+  const { accessKeyId, secretAccessKey } = splitAk(fullAk);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const host = "qianfan.baidubce.com";
 
-  // 构造规范请求串
+  // 1. 构造规范请求串（严格按百度官方要求，空行、顺序不能错）
+  const canonicalUri = uri;
+  const canonicalQueryString = "";
+  const canonicalHeaders = `host:${host}\nx-bce-date:${timestamp}`;
+  const signedHeaders = "host;x-bce-date";
+  
+  // 计算请求体哈希
+  const payloadHash = crypto.createHash("sha256").update(body, "utf8").digest("hex");
+
   const canonicalRequest = [
     method,
-    uri,
-    "",
-    `host:${host}`,
-    `x-bce-date:${timestamp}`,
-    "",
-    "host;x-bce-date",
-    crypto.createHash("sha256").update(body, "utf8").digest("hex")
+    canonicalUri,
+    canonicalQueryString,
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
   ].join("\n");
 
-  // 构造签名密钥
+  // 2. 构造待签名字符串
   const signingKey = crypto.createHmac("sha256", secretAccessKey)
     .update("bce-auth-v1")
     .update(accessKeyId)
     .update(timestamp)
     .update("1800")
     .digest();
+  
+  const stringToSign = [
+    "bce-auth-v1",
+    accessKeyId,
+    timestamp,
+    "1800",
+    signedHeaders,
+    crypto.createHash("sha256").update(canonicalRequest, "utf8").digest("hex")
+  ].join("\n");
 
-  // 生成最终签名
+  // 3. 生成最终签名
   const signature = crypto.createHmac("sha256", signingKey)
-    .update(canonicalRequest, "utf8")
+    .update(stringToSign, "utf8")
     .digest("base64");
 
-  // 返回认证头
+  // 4. 构造认证头
   return {
     "Host": host,
     "x-bce-date": timestamp,
-    "Authorization": `bce-auth-v1/${accessKeyId}/${timestamp}/1800/host;x-bce-date/${signature}`
+    "Authorization": `bce-auth-v1/${accessKeyId}/${timestamp}/1800/${signedHeaders}/${signature}`
   };
 }
 
@@ -145,6 +155,6 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 后端服务已启动：http://localhost:${PORT}`);
   console.log("🔑 AK配置状态：✅ 已加载，长度：", FULL_AK.length);
-  const { id, sk } = splitAk(FULL_AK);
-  console.log("🔑 AK拆分成功：ID=", id, "SK长度=", sk.length);
+  const { accessKeyId, secretAccessKey } = splitAk(FULL_AK);
+  console.log("🔑 AK拆分成功：ID=", accessKeyId, "SK长度=", secretAccessKey.length);
 });
