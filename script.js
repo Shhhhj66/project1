@@ -1,55 +1,64 @@
-const API_URL = "http://localhost:3000/api/chat";
+// 消息容器
+const chatContainer = document.getElementById('chat-container');
+// 输入框
+const inputBox = document.getElementById('input-box');
+// 发送按钮
+const sendBtn = document.getElementById('send-btn');
 
-const chatBox = document.getElementById("chatBox");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("sendBtn");
+// 消息历史（传给后端，保持对话上下文）
+let messageHistory = [];
 
-sendBtn.addEventListener("click", sendMessage);
-input.addEventListener("keypress", (e) => {
-  if (e.key === "Enter") sendMessage();
-});
-
+// 发送消息
 async function sendMessage() {
-  const text = input.value.trim();
-  if (!text) return;
+  const content = inputBox.value.trim();
+  if (!content) return;
 
-  addMessage(text, "user");
-  input.value = "";
+  // 1. 添加用户消息到页面
+  addMessageToUI('user', content);
+  inputBox.value = '';
+  // 禁用发送按钮，防止重复提交
+  sendBtn.disabled = true;
 
-  const loadingMsg = addMessage("AI思考中...", "bot");
+  // 2. 更新消息历史
+  messageHistory.push({ role: 'user', content: content });
 
+  // 3. 调用后端API
   try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [{ role: "user", content: text }]
-      })
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: messageHistory })
     });
 
-    const data = await res.json();
-    loadingMsg.remove();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || '请求失败');
 
-    if (data.error) {
-      addMessage(`错误：${data.error.message}`, "bot");
-      return;
-    }
-
-    // 适配新版千帆响应格式
-    const reply = data.choices?.[0]?.message?.content || "未获取到有效回复";
-    addMessage(reply, "bot");
-  } catch (err) {
-    loadingMsg.remove();
-    console.error("请求失败：", err);
-    addMessage(`请求失败：${err.message}`, "bot");
+    // 4. 添加AI回复到页面
+    addMessageToUI('assistant', data.result);
+    // 更新消息历史
+    messageHistory.push({ role: 'assistant', content: data.result });
+  } catch (error) {
+    // 5. 错误处理
+    addMessageToUI('system', `错误：${error.message}`);
+    console.error('请求失败:', error);
+  } finally {
+    // 恢复发送按钮
+    sendBtn.disabled = false;
+    // 滚动到底部
+    chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 }
 
-function addMessage(text, role) {
-  const div = document.createElement("div");
-  div.className = `msg ${role}`;
-  div.textContent = text;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
-  return div;
+// 添加消息到UI
+function addMessageToUI(role, content) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `message ${role}`;
+  messageDiv.textContent = content;
+  chatContainer.appendChild(messageDiv);
 }
+
+// 事件监听
+sendBtn.addEventListener('click', sendMessage);
+inputBox.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendMessage();
+});
