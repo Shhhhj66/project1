@@ -68,18 +68,18 @@
   </style>
 </head>
 <body>
-  <div class="title">AI 智能问答系统</div>
-  <div class="info">
-    学号：202335020536 &nbsp;&nbsp; 姓名：沈豪杰
-  </div>
+    <h1>AI 智能问答系统</h1>
+    <p>学号：202335020536 姓名：沈豪杰</p>
+    
+    <div id="chat-container" style="width:80%; margin:0 auto; border:1px solid #ccc; padding:20px; height:400px; overflow-y:auto;">
+        <!-- 消息会显示在这里 -->
+    </div>
+    
+    <div style="width:80%; margin:10px auto;">
+        <input type="text" id="input-box" placeholder="请输入问题..." style="width:80%; padding:8px;">
+        <button id="send-btn" style="padding:8px 16px;">发送</button>
+    </div>
 
-  <div class="chat-box" id="chatBox"></div>
-
-  <div class="input-area">
-    <input type="text" id="input" placeholder="请输入问题..." autocomplete="off">
-    <button id="sendBtn">发送</button>
-  </div>
-
-  <script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
