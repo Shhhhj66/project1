@@ -1,64 +1,78 @@
-// 消息容器
-const chatContainer = document.getElementById('chat-container');
-// 输入框
+// 获取页面元素
 const inputBox = document.getElementById('input-box');
-// 发送按钮
 const sendBtn = document.getElementById('send-btn');
+const chatContainer = document.getElementById('chat-container');
 
-// 消息历史（传给后端，保持对话上下文）
+// 消息历史
 let messageHistory = [];
 
-// 发送消息
-async function sendMessage() {
-  const content = inputBox.value.trim();
-  if (!content) return;
-
-  // 1. 添加用户消息到页面
-  addMessageToUI('user', content);
-  inputBox.value = '';
-  // 禁用发送按钮，防止重复提交
-  sendBtn.disabled = true;
-
-  // 2. 更新消息历史
-  messageHistory.push({ role: 'user', content: content });
-
-  // 3. 调用后端API
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: messageHistory })
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || '请求失败');
-
-    // 4. 添加AI回复到页面
-    addMessageToUI('assistant', data.result);
-    // 更新消息历史
-    messageHistory.push({ role: 'assistant', content: data.result });
-  } catch (error) {
-    // 5. 错误处理
-    addMessageToUI('system', `错误：${error.message}`);
-    console.error('请求失败:', error);
-  } finally {
-    // 恢复发送按钮
-    sendBtn.disabled = false;
+// 添加消息到UI
+function addMessageToUI(role, text) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+    
+    // 简单美化样式
+    if (role === 'user') {
+        messageDiv.style.cssText = 'text-align:right; background:#e0f7fa; padding:10px; border-radius:10px; margin:5px; display:inline-block; float:right; clear:both;';
+    } else {
+        messageDiv.style.cssText = 'text-align:left; background:#f5f5f5; padding:10px; border-radius:10px; margin:5px; display:inline-block; float:left; clear:both;';
+    }
+    
+    messageDiv.textContent = text;
+    chatContainer.appendChild(messageDiv);
+    // 清除浮动
+    const clearBr = document.createElement('br');
+    clearBr.style.clear = 'both';
+    chatContainer.appendChild(clearBr);
+    
     // 滚动到底部
     chatContainer.scrollTop = chatContainer.scrollHeight;
-  }
 }
 
-// 添加消息到UI
-function addMessageToUI(role, content) {
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `message ${role}`;
-  messageDiv.textContent = content;
-  chatContainer.appendChild(messageDiv);
+// 发送消息函数
+async function sendMessage() {
+    const content = inputBox.value.trim();
+    if (!content) return;
+
+    // 1. 显示用户消息
+    addMessageToUI('user', content);
+    inputBox.value = '';
+    sendBtn.disabled = true;
+
+    // 2. 更新历史记录
+    messageHistory.push({ role: 'user', content: content });
+
+    try {
+        // 3. 调用后端接口
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: messageHistory })
+        });
+
+        // 4. 解析数据（核心修复）
+        const data = await response.json();
+        
+        // 5. 安全获取结果
+        const aiReply = data.result || '未收到回复';
+        
+        // 6. 显示AI回复
+        addMessageToUI('assistant', aiReply);
+        
+        // 7. 更新历史记录
+        messageHistory.push({ role: 'assistant', content: aiReply });
+
+    } catch (error) {
+        console.error('Fetch error:', error);
+        addMessageToUI('system', '😱 网络请求失败，请检查服务是否启动');
+    } finally {
+        // 8. 恢复按钮状态
+        sendBtn.disabled = false;
+    }
 }
 
 // 事件监听
 sendBtn.addEventListener('click', sendMessage);
 inputBox.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendMessage();
+    if (e.key === 'Enter') sendMessage();
 });
